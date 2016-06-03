@@ -14,18 +14,6 @@ namespace SlashCommands.Controllers
     {
         private DateTime _sprint1StartDate = new DateTime(2016, 4, 18);
 
-        // GET: api/SprintSchedule
-        [HttpGet]
-        public IActionResult Get(int? sprintNum)
-        {
-            if (sprintNum == null)
-            {
-                sprintNum = GetCurrentSprint();
-            }
-            var dto = CalculateSprintSchedule(sprintNum.Value);
-            return Ok(dto);
-        }
-
         public async Task<IActionResult> Post()
         {
             var inCommand = Request.Form["command"][0];
@@ -33,16 +21,25 @@ namespace SlashCommands.Controllers
             var inResponseUrl = Request.Form["response_url"][0];
             var inUserId = Request.Form["user_id"][0];
             var inUserName = Request.Form["user_name"][0];
+            Serilog.Log.Information($"{inCommand} {inText} requested by {inUserName}");
 
             int sprintNum;
             int.TryParse(inText, out sprintNum);
             if (sprintNum < 1)
             {
-                sprintNum = GetCurrentSprint();
+                sprintNum = GetSprintForDate(DateTime.Now);
             }
-            var dto = CalculateSprintSchedule(sprintNum);
 
-            var pretext = $"*Sprint {dto.sprintNumber}*";
+            var slackPostJson = GetSlackPost(sprintNum, inCommand, inUserId);
+
+            await PostToSlack(inResponseUrl, slackPostJson);
+
+            return Ok();
+        }
+
+        private string GetSlackPost(int sprintNum, string inCommand, string inUserId)
+        {
+            var dto = CalculateSprintSchedule(sprintNum);
 
             var message = $"*Sprint {dto.sprintNumber}*\n" +
                           $"*Start*    {dto.sprintStartDate:MM/dd/yyyy}\n" +
@@ -58,17 +55,22 @@ namespace SlashCommands.Controllers
                 fallback = message,
                 attachments = new[]
                 {
-                    new {
-                        color = "#663399",
+                    new
+                    {
+                        color = "#0AA6C4",
                         text = message,
                         footer = footer,
-                        mrkdwn_in = new [] { "pretext", "text"}
+                        mrkdwn_in = new[] {"pretext", "text"}
                     }
                 }
             };
 
             var slackPostJson = JsonConvert.SerializeObject(slackPost);
+            return slackPostJson;
+        }
 
+        private async Task PostToSlack(string url, string slackPostJson)
+        {
             using (var client = new HttpClient())
             {
 
@@ -77,19 +79,19 @@ namespace SlashCommands.Controllers
                         new KeyValuePair<string, string>("payload", slackPostJson)
                     }
                 );
-                var response = client.PostAsync(inResponseUrl, content).Result;
+                var response = client.PostAsync(url, content).Result;
                 var responseString = await response.Content.ReadAsStringAsync();
                 var logLevel = response.IsSuccessStatusCode ? LogEventLevel.Information : LogEventLevel.Warning;
                 Serilog.Log.Write(logLevel, $"Slack returned code: {(int)response.StatusCode} {response.StatusCode}");
                 Serilog.Log.Write(logLevel, responseString);
             }
-
-            return Ok("command: " + inCommand);
         }
 
-        private int GetCurrentSprint()
+        private int GetSprintForDate(DateTime targetDate)
         {
-            return 4;
+            var daysSinceSprint1 = targetDate.Subtract(_sprint1StartDate).TotalDays;
+            var sprintNum = (daysSinceSprint1 / 14) + 1;
+            return (int)sprintNum;
         }
 
         private SprintScheuleDTO CalculateSprintSchedule(int sprintNumber)
