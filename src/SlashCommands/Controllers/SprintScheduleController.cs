@@ -50,8 +50,7 @@ namespace SlashCommands.Controllers
 
             var slackPost = new
             {
-                response_type = "in_channel",
-                username = "test",
+                response_type = "ephemeral",
                 fallback = message,
                 attachments = new[]
                 {
