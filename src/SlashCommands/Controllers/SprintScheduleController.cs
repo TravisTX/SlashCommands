@@ -50,7 +50,7 @@ namespace SlashCommands.Controllers
 
             var slackPost = new
             {
-                response_type = "ephemeral",
+                response_type = "in_channel",
                 attachments = new[]
                 {
                     new
