@@ -51,11 +51,11 @@ namespace SlashCommands.Controllers
             var slackPost = new
             {
                 response_type = "ephemeral",
-                fallback = message,
                 attachments = new[]
                 {
                     new
                     {
+                        fallback = message.Replace("*", ""),
                         color = "#0AA6C4",
                         text = message,
                         footer = footer,
