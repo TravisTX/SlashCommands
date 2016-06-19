@@ -6,13 +6,20 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Serilog.Events;
+using SlashCommands.DTOs;
+using SlashCommands.Services;
 
 namespace SlashCommands.Controllers
 {
     [Route("api/[controller]")]
     public class SprintScheduleController : Controller
     {
-        private DateTime _sprint1StartDate = new DateTime(2016, 4, 18);
+        private readonly SprintCalculatingService _sprintCalculatingService;
+
+        public SprintScheduleController()
+        {
+            _sprintCalculatingService = new SprintCalculatingService();
+        }
 
         public async Task<IActionResult> Post()
         {
@@ -24,22 +31,71 @@ namespace SlashCommands.Controllers
             Serilog.Log.Information($"{inCommand} {inText} requested by {inUserName}");
 
             int sprintNum;
-            int.TryParse(inText, out sprintNum);
-            if (sprintNum < 1)
+            DateTime targetDate;
+            string slackPostJson;
+            bool isSprintNum = int.TryParse(inText, out sprintNum);
+            bool isSprintDate = DateTime.TryParse(inText, out targetDate);
+            if (inText.Trim().Length == 0)
             {
-                sprintNum = GetSprintForDate(DateTime.Now);
+                targetDate = DateTime.Today;
+                isSprintDate = true;
             }
 
-            var slackPostJson = GetSlackPost(sprintNum, inCommand, inUserId);
+            if (isSprintNum)
+            {
+                // sprint number
+                slackPostJson = GetSlackPostFromSprintNum(sprintNum, inCommand, inUserId);
+            }
+            else if (isSprintDate)
+            {
+                // date
+                slackPostJson = GetSlackPostFromDate(targetDate, inCommand, inUserId);
+            }
+            else
+            {
+                // error
+                return Ok($"Invalid input provided: {inText}");
+            }
 
             await PostToSlack(inResponseUrl, slackPostJson);
 
             return Ok();
         }
 
-        private string GetSlackPost(int sprintNum, string inCommand, string inUserId)
+        private string GetSlackPostFromDate(DateTime targetDate, string inCommand, string inUserId)
         {
-            var dto = CalculateSprintSchedule(sprintNum);
+            var dto = _sprintCalculatingService.CalculateSprintDateSchedule(targetDate);
+
+            var message = $"*On {dto.targetDate:MM/dd/yyyy}*\n" +
+                          $"*QA*       Sprint {dto.qaSprintNum} (since {dto.qaSprintSince:MM/dd})\n" +
+                          $"*UAT*     Sprint {dto.uatSprintNum} (since {dto.uatSprintSince:MM/dd})\n" +
+                          $"*Prod*     Sprint {dto.prodSprintNum} (since {dto.prodSprintSince:MM/dd})";
+
+            var footer = $"{inCommand} triggered by <@{inUserId}>";
+
+            var slackPost = new
+            {
+                response_type = "in_channel",
+                attachments = new[]
+                {
+                    new
+                    {
+                        fallback = message.Replace("*", ""),
+                        color = "#0AA6C4",
+                        text = message,
+                        footer = footer,
+                        mrkdwn_in = new[] {"pretext", "text"}
+                    }
+                }
+            };
+
+            var slackPostJson = JsonConvert.SerializeObject(slackPost);
+            return slackPostJson;
+        }
+
+        private string GetSlackPostFromSprintNum(int sprintNum, string inCommand, string inUserId)
+        {
+            var dto = _sprintCalculatingService.CalculateSprintSchedule(sprintNum);
 
             var message = $"*Sprint {dto.sprintNumber}*\n" +
                           $"*Start*    {dto.sprintStartDate:MM/dd/yyyy}\n" +
@@ -86,31 +142,6 @@ namespace SlashCommands.Controllers
             }
         }
 
-        private int GetSprintForDate(DateTime targetDate)
-        {
-            var daysSinceSprint1 = targetDate.Subtract(_sprint1StartDate).TotalDays;
-            var sprintNum = (daysSinceSprint1 / 14) + 1;
-            return (int)sprintNum;
-        }
 
-        private SprintScheuleDTO CalculateSprintSchedule(int sprintNumber)
-        {
-            var result = new SprintScheuleDTO();
-            result.sprintNumber = sprintNumber;
-            result.sprintStartDate = _sprint1StartDate.AddDays(14 * (sprintNumber - 1));
-            result.sprintUatDate = result.sprintStartDate.AddDays(11);
-            result.sprintProdDate = result.sprintStartDate.AddDays(20);
-
-            return result;
-        }
-
-        private class SprintScheuleDTO
-        {
-            public int sprintNumber { get; set; }
-            public DateTime sprintStartDate { get; set; }
-            public DateTime sprintUatDate { get; set; }
-            public DateTime sprintProdDate { get; set; }
-
-        }
     }
 }
