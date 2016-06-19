@@ -54,7 +54,11 @@ namespace SlashCommands.Controllers
             else
             {
                 // error
-                return Ok($"Invalid input provided: {inText}");
+                string msg = "Acceptable parameters are a sprint number, or a date";
+                msg += "\nexamples:";
+                msg += "\n /sprint 3";
+                msg += "\n /sprint 6/1/2016";
+                return Ok(msg);
             }
 
             await PostToSlack(inResponseUrl, slackPostJson);
