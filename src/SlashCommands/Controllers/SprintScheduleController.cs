@@ -44,12 +44,12 @@ namespace SlashCommands.Controllers
             if (isSprintNum)
             {
                 // sprint number
-                slackPostJson = GetSlackPostFromSprintNum(sprintNum, inCommand, inUserId);
+                slackPostJson = GetSlackPostFromSprintNum(sprintNum, $"{inCommand} {inText}", inUserId);
             }
             else if (isSprintDate)
             {
                 // date
-                slackPostJson = GetSlackPostFromDate(targetDate, inCommand, inUserId);
+                slackPostJson = GetSlackPostFromDate(targetDate, $"{inCommand} {inText}", inUserId);
             }
             else
             {
